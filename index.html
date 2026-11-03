@@ -80,6 +80,7 @@
   .modal[hidden] { display: none; }
   .modal-box { width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 12px; }
   .modal-box img { width: 100%; height: auto; border-radius: 14px; display: block; background: #111; }
+  .modal-box img.cek { width: auto; max-width: 100%; max-height: 62vh; margin: 0 auto; background: conic-gradient(#3b3b3b 25%, #2a2a2a 0 50%, #3b3b3b 0 75%, #2a2a2a 0) 0 0 / 24px 24px; }
   .modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .modal-actions button { font-size: 1rem; padding: 14px 10px; }
   .modal-actions .wide { grid-column: 1 / -1; }
@@ -163,7 +164,7 @@
     <button class="primary" id="btnMulai">Mulai lari</button>
     <button id="btnJeda" hidden>Jeda</button>
     <button class="stop" id="btnSelesai" hidden>Selesai</button>
-    <button class="hasil" id="btnHasil" hidden>Buat gambar hasil lari</button>
+    <button class="hasil" id="btnHasil" hidden>Buat stiker hasil lari</button>
   </section>
 
   <div class="last" id="terakhir"></div>
@@ -171,6 +172,13 @@
 
 <div class="modal" id="modal" hidden>
   <div class="modal-box">
+    <div class="chips" id="gayaPilih">
+      <button class="chip" data-g="tegak" aria-pressed="true">Tegak</button>
+      <button class="chip" data-g="kotak" aria-pressed="false">Kotak</button>
+      <button class="chip" data-g="baris" aria-pressed="false">Baris</button>
+      <button class="chip" data-g="foto" aria-pressed="false">Dengan foto</button>
+    </div>
+    <div class="sub" id="hasilHint"></div>
     <img id="hasilImg" alt="Gambar hasil lari">
     <div class="modal-actions">
       <button id="btnUnduh" class="primary wide">Simpan gambar</button>
@@ -310,7 +318,7 @@
   try { var tv = parseInt(localStorage.getItem("pelari-target"), 10); if (tv >= 0) target = tv; } catch (x) {}
 
   function renderTarget() {
-    var chips = document.querySelectorAll(".chip");
+    var chips = document.querySelectorAll("#chips .chip");
     for (var i = 0; i < chips.length; i++) chips[i].setAttribute("aria-pressed", String(parseInt(chips[i].dataset.m, 10) === target));
     var tt = $("ttext");
     if (!(target > 0)) { $("tbar").style.width = "0"; tt.className = "ttext"; tt.textContent = "Pilih target jarak"; return; }
@@ -533,6 +541,93 @@
     x.fill("evenodd"); x.restore();
   }
 
+  var NUMF = '"Barlow Condensed", "Arial Narrow", Impact, sans-serif';
+  var BODYF = '"Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+
+  function dataLari() {
+    var rec = lastRec, km = rec.dist / 1000, d = new Date(rec.at), jam = d.getHours();
+    var waktuHari = jam < 11 ? "Pagi" : jam < 15 ? "Siang" : jam < 18 ? "Sore" : "Malam";
+    var paceStr = "--:--";
+    if (km > 0.02 && rec.ms > 0) { var ps = Math.round((rec.ms / 1000) / km); paceStr = Math.floor(ps / 60) + ":" + pad(ps % 60); }
+    return { rec: rec, km: km, d: d, waktuHari: waktuHari, paceStr: paceStr, waktu: hms(rec.ms), kmStr: fmt(km, 2) };
+  }
+
+  // kotak transparan berisi 3 kolom (Waktu, Pace, Jarak); koordinat kotak: x 50, y 330, 980 x 470
+  function drawBox(x, L) {
+    roundRect(x, 50, 330, 980, 470, 36);
+    x.fillStyle = "rgba(0,0,0,.28)"; x.fill();
+    x.strokeStyle = "rgba(255,255,255,.42)"; x.lineWidth = 3; x.stroke();
+    x.strokeStyle = "rgba(255,255,255,.35)"; x.lineWidth = 2;
+    [377, 703].forEach(function (lx) { x.beginPath(); x.moveTo(lx, 400); x.lineTo(lx, 730); x.stroke(); });
+
+    function kolom(cx, icon, label, value, unit) {
+      x.save();
+      x.shadowColor = "rgba(0,0,0,.5)"; x.shadowBlur = 12; x.shadowOffsetY = 2;
+      icon(x, cx, 425);
+      x.textAlign = "center"; x.fillStyle = "rgba(255,255,255,.85)"; x.font = "600 38px " + BODYF; x.fillText(label, cx, 530);
+      var size = 140;
+      x.font = "700 " + size + "px " + NUMF;
+      while (x.measureText(value).width > 290 && size > 50) { size -= 4; x.font = "700 " + size + "px " + NUMF; }
+      x.fillStyle = "#fff"; x.fillText(value, cx, 660);
+      if (unit) { x.fillStyle = "rgba(255,255,255,.85)"; x.font = "600 42px " + BODYF; x.fillText(unit, cx, 725); }
+      x.restore();
+    }
+    kolom(213, iconStopwatch, "Waktu", L.waktu, "");
+    kolom(540, iconSpeed, "Pace", L.paceStr, "/km");
+    kolom(867, iconPin, "Jarak", L.kmStr, "km");
+  }
+
+  // ---- Stiker transparan (PNG tanpa latar) untuk ditempel di CapCut sebagai overlay ----
+  function ico(x, fn, cx, cy, sc) { x.save(); x.translate(cx, cy); x.scale(sc, sc); fn(x, 0, 0); x.restore(); }
+  function txt(x, t, px, py, font, color, spacing) {
+    x.font = font; x.fillStyle = color || "#fff"; x.textAlign = "center";
+    try { x.letterSpacing = spacing || "0px"; } catch (e) {}
+    x.fillText(t, px, py);
+    try { x.letterSpacing = "0px"; } catch (e) {}
+  }
+  function fitFont(x, t, size, maxW, min) {
+    var f = "700 " + size + "px " + NUMF;
+    x.font = f;
+    while (x.measureText(t).width > maxW && size > min) { size -= 4; f = "700 " + size + "px " + NUMF; x.font = f; }
+    return f;
+  }
+  function bayang(x) { x.shadowColor = "rgba(0,0,0,.55)"; x.shadowBlur = 14; x.shadowOffsetY = 3; }
+
+  function drawStiker(g) {
+    var L = dataLari(), c = document.createElement("canvas"), x, M = "rgba(255,255,255,.85)";
+    if (g === "kotak") {
+      c.width = 1000; c.height = 560; x = c.getContext("2d");
+      x.translate(-40, -320); drawBox(x, L); x.setTransform(1, 0, 0, 1, 0, 0);
+      bayang(x); txt(x, "yatzz", 500, 535, "700 44px " + NUMF, "#3fc9c0", "6px");
+    } else if (g === "baris") {
+      c.width = 1080; c.height = 300; x = c.getContext("2d");
+      x.strokeStyle = "rgba(255,255,255,.4)"; x.lineWidth = 2;
+      [360, 720].forEach(function (lx) { x.beginPath(); x.moveTo(lx, 50); x.lineTo(lx, 250); x.stroke(); });
+      bayang(x);
+      [[180, iconStopwatch, "WAKTU", L.waktu], [540, iconSpeed, "PACE /KM", L.paceStr], [900, iconPin, "JARAK KM", L.kmStr]].forEach(function (k) {
+        ico(x, k[1], k[0], 70, 0.8);
+        txt(x, k[2], k[0], 150, "600 34px " + BODYF, M, "4px");
+        txt(x, k[3], k[0], 265, fitFont(x, k[3], 120, 300, 50), "#fff");
+      });
+    } else {
+      c.width = 700; c.height = 1120; x = c.getContext("2d");
+      bayang(x);
+      ico(x, iconRunner, 350, 115, 1.25);
+      txt(x, "LARI · " + L.waktuHari.toUpperCase(), 350, 235, "600 38px " + BODYF, M, "6px");
+      txt(x, "JARAK", 350, 325, "600 34px " + BODYF, M, "6px");
+      txt(x, L.kmStr, 350, 540, fitFont(x, L.kmStr, 250, 620, 80), "#fff");
+      txt(x, "km", 350, 605, "600 56px " + BODYF, M);
+      x.save(); x.shadowColor = "transparent"; x.strokeStyle = "rgba(255,255,255,.4)"; x.lineWidth = 2;
+      x.beginPath(); x.moveTo(200, 645); x.lineTo(500, 645); x.stroke(); x.restore();
+      txt(x, "WAKTU", 350, 705, "600 34px " + BODYF, M, "6px");
+      txt(x, L.waktu, 350, 830, fitFont(x, L.waktu, 140, 560, 60), "#fff");
+      txt(x, "PACE /KM", 350, 895, "600 34px " + BODYF, M, "6px");
+      txt(x, L.paceStr, 350, 1020, fitFont(x, L.paceStr, 140, 560, 60), "#fff");
+      txt(x, "yatzz", 350, 1090, "700 44px " + NUMF, "#3fc9c0", "6px");
+    }
+    return c;
+  }
+
   function drawResult(img) {
     var rec = lastRec, W = 1080, H = 1080;
     var c = document.createElement("canvas"); c.width = W; c.height = H;
@@ -552,10 +647,7 @@
     x.fillStyle = "rgba(0,0,0,.38)"; x.fillRect(0, 0, W, H);
 
     // data
-    var km = rec.dist / 1000, d = new Date(rec.at), jam = d.getHours();
-    var waktuHari = jam < 11 ? "Pagi" : jam < 15 ? "Siang" : jam < 18 ? "Sore" : "Malam";
-    var paceStr = "--:--";
-    if (km > 0.02 && rec.ms > 0) { var ps = Math.round((rec.ms / 1000) / km); paceStr = Math.floor(ps / 60) + ":" + pad(ps % 60); }
+    var L = dataLari(), km = L.km, d = L.d, waktuHari = L.waktuHari, paceStr = L.paceStr;
 
     // judul
     x.textBaseline = "alphabetic"; x.textAlign = "left";
@@ -565,25 +657,7 @@
     x.fillStyle = "rgba(255,255,255,.75)"; x.font = "400 44px " + BODY; x.fillText(waktuHari + " \u00b7 Outdoor", 215, 208);
     x.shadowBlur = 0;
 
-    // kotak transparan
-    roundRect(x, 50, 330, 980, 470, 36);
-    x.fillStyle = "rgba(0,0,0,.28)"; x.fill();
-    x.strokeStyle = "rgba(255,255,255,.42)"; x.lineWidth = 3; x.stroke();
-    x.strokeStyle = "rgba(255,255,255,.35)"; x.lineWidth = 2;
-    [377, 703].forEach(function (lx) { x.beginPath(); x.moveTo(lx, 400); x.lineTo(lx, 730); x.stroke(); });
-
-    function kolom(cx, icon, label, value, unit) {
-      icon(x, cx, 425);
-      x.textAlign = "center"; x.fillStyle = "rgba(255,255,255,.8)"; x.font = "600 38px " + BODY; x.fillText(label, cx, 530);
-      var size = 140;
-      x.font = "700 " + size + "px " + NUM;
-      while (x.measureText(value).width > 290 && size > 50) { size -= 4; x.font = "700 " + size + "px " + NUM; }
-      x.fillStyle = "#fff"; x.fillText(value, cx, 660);
-      if (unit) { x.fillStyle = "rgba(255,255,255,.8)"; x.font = "600 42px " + BODY; x.fillText(unit, cx, 725); }
-    }
-    kolom(213, iconStopwatch, "Waktu", hms(rec.ms), "");
-    kolom(540, iconSpeed, "Pace", paceStr, "/km");
-    kolom(867, iconPin, "Jarak", fmt(km, 2), "km");
+    drawBox(x, L);
 
     // kaki
     x.textAlign = "center";
@@ -593,16 +667,38 @@
     return c;
   }
 
+  var gaya = "tegak";   // tegak | kotak | baris = stiker PNG transparan; foto = gambar dengan foto latar (JPG)
+  var HINT = {
+    tegak: "Stiker PNG transparan gaya tegak. Simpan, lalu di CapCut pilih Overlay > Tambahkan overlay.",
+    kotak: "Stiker PNG transparan dengan kotak. Simpan, lalu di CapCut pilih Overlay > Tambahkan overlay.",
+    baris: "Stiker PNG transparan satu baris. Simpan, lalu di CapCut pilih Overlay > Tambahkan overlay.",
+    foto: "Gambar persegi dengan foto latar pilihanmu (JPG)."
+  };
+  function tipeFile() { return gaya === "foto" ? "image/jpeg" : "image/png"; }
+
   function refreshHasil() {
     if (!lastRec) return;
+    var chips = document.querySelectorAll("#gayaPilih .chip");
+    for (var i = 0; i < chips.length; i++) chips[i].setAttribute("aria-pressed", String(chips[i].dataset.g === gaya));
+    $("hasilHint").textContent = HINT[gaya];
+    $("btnFoto").hidden = gaya !== "foto";
+    $("btnBagikan").classList.toggle("wide", gaya !== "foto");
+    $("hasilImg").className = gaya === "foto" ? "" : "cek";
     fontsReady(function () {
-      hasilCanvas = drawResult(bgImg);
-      $("hasilImg").src = hasilCanvas.toDataURL("image/jpeg", 0.92);
+      hasilCanvas = gaya === "foto" ? drawResult(bgImg) : drawStiker(gaya);
+      $("hasilImg").src = hasilCanvas.toDataURL(tipeFile(), 0.92);
     });
   }
-  function namaFile() { return "hasil-lari-" + new Date(lastRec.at).toISOString().slice(0, 10) + ".jpg"; }
-  function dapatBlob(cb) { if (hasilCanvas) hasilCanvas.toBlob(cb, "image/jpeg", 0.92); }
+  function namaFile() {
+    return (gaya === "foto" ? "hasil-lari-" : "stiker-lari-" + gaya + "-") + new Date(lastRec.at).toISOString().slice(0, 10) + (gaya === "foto" ? ".jpg" : ".png");
+  }
+  function dapatBlob(cb) { if (hasilCanvas) hasilCanvas.toBlob(cb, tipeFile(), 0.92); }
 
+  $("gayaPilih").addEventListener("click", function (ev) {
+    var b = ev.target.closest(".chip");
+    if (!b) return;
+    gaya = b.dataset.g; refreshHasil();
+  });
   $("btnHasil").onclick = function () { $("modal").hidden = false; refreshHasil(); };
   $("btnTutup").onclick = function () { $("modal").hidden = true; };
   $("btnFoto").onclick = function () { $("fotoLatar").click(); };
@@ -624,7 +720,7 @@
   $("btnBagikan").onclick = function () {
     dapatBlob(function (blob) {
       var file;
-      try { file = new File([blob], namaFile(), { type: "image/jpeg" }); } catch (e) { unduh(blob); return; }
+      try { file = new File([blob], namaFile(), { type: tipeFile() }); } catch (e) { unduh(blob); return; }
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         navigator.share({ files: [file], title: "Hasil lari" }).catch(function () {});
       } else { unduh(blob); }
