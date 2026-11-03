@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pelari</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Barlow:wght@400;600&display=swap">
+<style>
+  /* Layout: satu layar, jam di atas, jarak besar di tengah, tombol di bawah (mudah ditekan saat berlari) */
+  :root {
+    --bg: #0d1820;                       /* warna lapisan redup di atas video */
+    --panel: transparent;                /* isi kotak: transparan */
+    --box-line: rgba(255, 255, 255, .38);/* garis kotak */
+    --ink: #ffffff;
+    --muted: rgba(255, 255, 255, .78);
+    --line: rgba(255, 255, 255, .32);
+    --accent: #3fc9c0;
+    --accent-ink: #06201f;
+    --stop: #ff9d94;
+    --font-num: "Barlow Condensed", "Arial Narrow", Impact, sans-serif;
+    --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: var(--font-body); font-size: 16px;
+    text-shadow: 0 1px 6px rgba(0, 0, 0, .65);
+    padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
+    padding-block: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-bottom, 0px));
+  }
+  #bgvideo { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+  .bgshade { position: fixed; inset: 0; z-index: -1; background: var(--bg); opacity: .55; }
+  main { position: relative; max-width: 520px; margin: 0 auto; min-height: 100%; display: flex; flex-direction: column; gap: 16px; }
+  .brand { font-family: var(--font-num); font-weight: 700; font-size: 1.5rem; letter-spacing: .28em; text-transform: lowercase; text-align: center; color: var(--accent); margin-bottom: -4px; }
+  .dev { display: block; width: 88px; height: 88px; max-width: 100%; margin: 0 auto; border-radius: 50%; object-fit: cover; border: 3px solid var(--accent); box-shadow: 0 2px 12px rgba(0, 0, 0, .45); }
+  .clock { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .clock .time { font-family: var(--font-num); font-weight: 700; font-size: 2.6rem; line-height: 1; font-variant-numeric: tabular-nums; }
+  .clock .date { color: var(--muted); font-size: .9rem; text-align: right; }
+  .label { text-transform: uppercase; letter-spacing: .12em; font-size: .72rem; color: var(--muted); font-weight: 600; }
+  .hero { background: var(--panel); border: 1px solid var(--box-line); border-radius: 16px; padding: 20px 18px; display: flex; flex-direction: column; gap: 6px; }
+  .dist { font-family: var(--font-num); font-weight: 700; font-size: clamp(5rem, 28vw, 8rem); line-height: .95; font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .dist small { font-size: 2rem; color: var(--muted); font-weight: 500; }
+  .sub { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .track { height: 8px; border-radius: 8px; background: rgba(255, 255, 255, .22); overflow: hidden; margin-top: 8px; }
+  .track > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .stat { background: var(--panel); border: 1px solid var(--box-line); border-radius: 12px; padding: 12px; min-width: 0; }
+  .stat b { display: block; font-family: var(--font-num); font-size: 1.9rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .panel { background: var(--panel); border: 1px solid var(--box-line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .chip { font-size: .95rem; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--box-line); background: transparent; }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .tinput { width: 6.5rem; font: inherit; font-size: 1rem; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--box-line); background: transparent; color: var(--ink); }
+  .tbar { height: 10px; border-radius: 10px; background: rgba(255, 255, 255, .22); overflow: hidden; }
+  .tbar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  .ttext { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .ttext.done { color: var(--accent); }
+  .song { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+  .song:first-of-type { border-top: 0; }
+  .song .nama { font-weight: 600; background: none; border: 0; padding: 0; text-align: left; font-size: 1rem; color: var(--ink); cursor: pointer; }
+  .song .nama.main { color: var(--accent); }
+  .song .info { color: var(--muted); font-size: .85rem; display: block; font-weight: 400; }
+  .song label { font-size: .9rem; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); cursor: pointer; background: var(--bg); }
+  .song input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .song label:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .musicbar { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .musicbar button { font-size: 1rem; padding: 12px; }
+  .status { color: var(--muted); font-size: .9rem; min-height: 1.4em; }
+  .status.warn { color: var(--stop); }
+  .actions { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; position: sticky; bottom: 0; padding-block: 8px; }
+  button { font: inherit; font-weight: 600; font-size: 1.15rem; padding: 18px 12px; border-radius: 14px; border: 2px solid var(--box-line); background: transparent; color: var(--ink); cursor: pointer; }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  button.primary { background: var(--accent); border-color: var(--accent); text-shadow: none; color: var(--accent-ink); grid-column: 1 / -1; font-size: 1.4rem; padding: 22px 12px; }
+  button.stop { color: var(--stop); border-color: var(--stop); }
+  .last { color: var(--muted); font-size: .9rem; text-align: center; }
+</style>
+</head>
+<body>
+<video id="bgvideo" autoplay muted loop playsinline preload="auto" aria-hidden="true" hidden></video>
+<div class="bgshade" id="bgshade" hidden></div>
+<main>
+  <div class="brand">yatzz</div>
+  <img class="dev" id="devfoto" alt="Foto developer yatzz" hidden>
+  <header class="clock">
+    <div class="time" id="jam">--:--:--</div>
+    <div class="date" id="tanggal"></div>
+  </header>
+
+  <section class="hero" aria-live="polite">
+    <span class="label">Jarak lari</span>
+    <div class="dist"><span id="meter">0</span><small>m</small></div>
+    <div class="sub" id="km">0,00 km · putaran lintasan 400 m: 0,0</div>
+    <div class="track"><i id="bar"></i></div>
+  </section>
+
+  <section class="stats">
+    <div class="stat"><span class="label">Waktu</span><b id="durasi">00:00</b></div>
+    <div class="stat"><span class="label">Pace /km</span><b id="pace">--:--</b></div>
+    <div class="stat"><span class="label">km/jam</span><b id="speed">0,0</b></div>
+  </section>
+
+  <section class="panel" aria-label="Target jarak">
+    <span class="label">Target jarak</span>
+    <div class="chips" id="chips">
+      <button class="chip" data-m="1000" aria-pressed="false">1.000 m</button>
+      <button class="chip" data-m="2000" aria-pressed="false">2.000 m</button>
+      <button class="chip" data-m="3000" aria-pressed="false">3.000 m</button>
+      <button class="chip" data-m="5000" aria-pressed="false">5.000 m</button>
+      <input class="tinput" id="target" type="number" inputmode="numeric" min="0" step="100" aria-label="Target jarak dalam meter" placeholder="meter">
+    </div>
+    <div class="tbar"><i id="tbar"></i></div>
+    <div class="ttext" id="ttext">Pilih target jarak</div>
+  </section>
+
+  <section class="panel" aria-label="Lagu">
+    <span class="label">Lagu</span>
+    <div id="songs"></div>
+    <div class="musicbar">
+      <button id="btnPutar">Putar lagu</button>
+      <button id="btnNext">Lagu berikut</button>
+    </div>
+    <div class="sub" id="musicInfo">Ketuk judul lagu untuk memutar.</div>
+    <audio id="audio" preload="auto"></audio>
+  </section>
+
+  <div class="status" id="status">Tekan Mulai, lalu izinkan akses lokasi.</div>
+
+  <section class="actions">
+    <button class="primary" id="btnMulai">Mulai lari</button>
+    <button id="btnJeda" hidden>Jeda</button>
+    <button class="stop" id="btnSelesai" hidden>Selesai</button>
+  </section>
+
+  <div class="last" id="terakhir"></div>
+</main>
+
+<script>
+(function () {
+  // ==========================================================
+  // DAFTAR LAGU: taruh file MP3 di folder "lagu" di samping
+  // lari.html, lalu samakan nama file-nya di bawah ini.
+  //
+  //   folder/
+  //   |-- lari.html
+  //   `-- lagu/
+  //       |-- teh-hijau.mp3
+  //       `-- dunia-yang-nanti.mp3
+  //
+  // Mau tambah lagu? Tambah satu baris { title, src } lagi.
+  // ==========================================================
+  var songs = [
+    { title: "Teh Hijau",        src: "Teh hijau.mp3" },
+    { title: "Dunia yang Nanti", src: "dunia yang nanti.mp3" },
+    { title: "bruno mars", src: "Bruno mars.mp3"},
+    { title: "poompei", src: "pommpei.mp3"},
+    { title: "rewrite the stars", src: "rewrite the stars.mp3"},
+    { title: "viva la vida", src: "Viva la vida.mp3"}
+  ];
+
+  // ==========================================================
+  // VIDEO LATAR: isi lokasi file video di bawah ini, lalu
+  // taruh videonya di folder "video" di samping lari.html.
+  // Kosongkan ("") kalau tidak mau pakai video latar.
+  //
+  //   folder/
+  //   |-- lari.html
+  //   `-- video/
+  //       `-- latar.mp4
+  //
+  // Video otomatis berputar tanpa suara dan diulang terus.
+  // Pakai MP4 (H.264) yang ukurannya kecil supaya hemat kuota.
+  // Redupnya video diatur lewat opacity di .bgshade (CSS).
+  // ==========================================================
+  var VIDEO_LATAR = "gojo loading screen.mp4";
+
+  // ==========================================================
+  // FOTO DEVELOPER: taruh fotonya di folder "foto" di samping
+  // lari.html, lalu samakan namanya di bawah ini.
+  // Kosongkan ("") kalau tidak mau menampilkan foto.
+  //
+  //   folder/
+  //   |-- lari.html
+  //   `-- foto/
+  //       `-- yatzz.jpg
+  //
+  // Fotonya otomatis dipotong jadi bulat. Pakai foto persegi
+  // atau wajah di tengah supaya hasilnya rapi.
+  // ==========================================================
+  var FOTO_DEV = "badut yatzz neon.jpg";
+
+  (function () {
+    var f = document.getElementById("devfoto");
+    if (!FOTO_DEV) return;
+    f.addEventListener("load", function () { f.hidden = false; });
+    f.addEventListener("error", function () { f.hidden = true; });
+    f.src = FOTO_DEV;
+  })();
+
+  (function () {
+    var v = document.getElementById("bgvideo"), sh = document.getElementById("bgshade");
+    if (!VIDEO_LATAR) return;
+    v.addEventListener("error", function () { v.hidden = true; sh.hidden = true; });
+    v.src = VIDEO_LATAR;
+    v.hidden = false; sh.hidden = false;
+    var p = v.play();
+    if (p && p.catch) p.catch(function () {});
+  })();
+
+  var $ = function (id) { return document.getElementById(id); };
+  var fmt = function (n, d) { return n.toLocaleString("id-ID", { minimumFractionDigits: d, maximumFractionDigits: d }); };
+  var pad = function (n) { return String(n).padStart(2, "0"); };
+
+  // Jam digital
+  function tickJam() {
+    var d = new Date();
+    $("jam").textContent = pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+    $("tanggal").textContent = d.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" });
+  }
+
+  var s = { mode: "idle", dist: 0, acc: 0, segStart: 0, last: null, watch: null, wake: null };
+
+  function elapsed() { return s.acc + (s.mode === "running" ? Date.now() - s.segStart : 0); }
+  function hms(ms) {
+    var t = Math.floor(ms / 1000), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), x = t % 60;
+    return h > 0 ? h + ":" + pad(m) + ":" + pad(x) : pad(m) + ":" + pad(x);
+  }
+
+  function render() {
+    var e = elapsed(), km = s.dist / 1000;
+    $("meter").textContent = Math.round(s.dist).toLocaleString("id-ID");
+    $("km").textContent = fmt(km, 2) + " km · putaran lintasan 400 m: " + fmt(s.dist / 400, 1);
+    $("bar").style.width = ((s.dist % 400) / 400 * 100) + "%";
+    $("durasi").textContent = hms(e);
+    renderTarget();
+    if (km > 0.02 && e > 0) {
+      var paceSec = (e / 1000) / km;
+      $("pace").textContent = pad(Math.floor(paceSec / 60)) + ":" + pad(Math.round(paceSec % 60) % 60);
+      $("speed").textContent = fmt(km / (e / 3600000), 1);
+    } else {
+      $("pace").textContent = "--:--";
+      $("speed").textContent = "0,0";
+    }
+  }
+
+  // Target jarak
+  var target = 2000;
+  try { var tv = parseInt(localStorage.getItem("pelari-target"), 10); if (tv >= 0) target = tv; } catch (x) {}
+
+  function renderTarget() {
+    var chips = document.querySelectorAll(".chip");
+    for (var i = 0; i < chips.length; i++) chips[i].setAttribute("aria-pressed", String(parseInt(chips[i].dataset.m, 10) === target));
+    var tt = $("ttext");
+    if (!(target > 0)) { $("tbar").style.width = "0"; tt.className = "ttext"; tt.textContent = "Pilih target jarak"; return; }
+    $("tbar").style.width = Math.min(100, s.dist / target * 100) + "%";
+    if (s.dist >= target) {
+      tt.className = "ttext done";
+      tt.textContent = "Target " + target.toLocaleString("id-ID") + " m tercapai!";
+      if (s.mode === "running" && !s.reached) {
+        s.reached = true;
+        try { if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 600]); } catch (x) {}
+      }
+    } else {
+      tt.className = "ttext";
+      tt.textContent = "Sisa " + Math.ceil(target - s.dist).toLocaleString("id-ID") + " m dari " + target.toLocaleString("id-ID") + " m";
+    }
+  }
+  function setTarget(v) {
+    target = v > 0 ? v : 0;
+    s.reached = target > 0 && s.dist >= target;
+    try { localStorage.setItem("pelari-target", String(target)); } catch (x) {}
+    renderTarget();
+  }
+  $("chips").addEventListener("click", function (ev) {
+    var b = ev.target.closest(".chip");
+    if (!b) return;
+    $("target").value = b.dataset.m;
+    setTarget(parseInt(b.dataset.m, 10));
+  });
+  $("target").addEventListener("input", function () { setTarget(parseInt(this.value, 10) || 0); });
+  $("target").value = target > 0 ? target : "";
+
+  function status(t, warn) { var el = $("status"); el.textContent = t; el.className = "status" + (warn ? " warn" : ""); }
+
+  function haversine(a, b) {
+    var R = 6371000, r = Math.PI / 180;
+    var dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+    var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
+  function onPos(p) {
+    var acc = p.coords.accuracy;
+    if (acc > 30) { status("Sinyal GPS lemah (±" + Math.round(acc) + " m). Keluar ke area terbuka.", true); return; }
+    status("GPS aktif (±" + Math.round(acc) + " m)");
+    var cur = { lat: p.coords.latitude, lon: p.coords.longitude, t: p.timestamp };
+    if (s.last) {
+      var d = haversine(s.last, cur), dt = (cur.t - s.last.t) / 1000;
+      if (d < 3) return;                     // diam atau noise GPS
+      if (dt > 0 && d / dt > 12) return;     // lompatan tidak wajar (>43 km/jam)
+      s.dist += d;
+    }
+    s.last = cur;
+    render();
+  }
+
+  function onErr(e) {
+    if (e.code === 1) status("Izin lokasi ditolak. Aktifkan izin lokasi untuk browser ini.", true);
+    else if (e.code === 2) status("Lokasi tidak tersedia. Nyalakan GPS.", true);
+    else status("GPS belum merespons, mencoba lagi...", true);
+  }
+
+  function startGps() {
+    if (!navigator.geolocation) { status("Browser ini tidak mendukung GPS.", true); return false; }
+    s.last = null;
+    s.watch = navigator.geolocation.watchPosition(onPos, onErr, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+    return true;
+  }
+  function stopGps() { if (s.watch !== null) { navigator.geolocation.clearWatch(s.watch); s.watch = null; } }
+
+  function lockScreen() {
+    try { if (navigator.wakeLock) navigator.wakeLock.request("screen").then(function (w) { s.wake = w; }, function () {}); } catch (e) {}
+  }
+  function unlockScreen() { try { if (s.wake) { s.wake.release(); s.wake = null; } } catch (e) {} }
+
+  function ui() {
+    $("btnMulai").hidden = s.mode !== "idle";
+    $("btnJeda").hidden = s.mode === "idle";
+    $("btnSelesai").hidden = s.mode === "idle";
+    $("btnJeda").textContent = s.mode === "paused" ? "Lanjut" : "Jeda";
+  }
+
+  $("btnMulai").onclick = function () {
+    s.dist = 0; s.acc = 0; s.reached = false;
+    if (!startGps()) return;
+    s.segStart = Date.now(); s.mode = "running";
+    status("Mencari sinyal GPS...");
+    lockScreen(); ui(); render();
+    if (audio.paused) startMusic();
+  };
+  $("btnJeda").onclick = function () {
+    if (s.mode === "running") {
+      s.acc += Date.now() - s.segStart; s.mode = "paused"; stopGps(); unlockScreen();
+      status("Dijeda.");
+    } else {
+      if (!startGps()) return;
+      s.segStart = Date.now(); s.mode = "running"; lockScreen();
+      status("Mencari sinyal GPS...");
+    }
+    ui(); render();
+  };
+  $("btnSelesai").onclick = function () {
+    var e = elapsed();
+    if (s.mode === "running") s.acc += Date.now() - s.segStart;
+    s.mode = "idle"; stopGps(); unlockScreen(); audio.pause(); renderSongs();
+    var rec = { dist: Math.round(s.dist), ms: s.acc, at: new Date().toISOString() };
+    try { localStorage.setItem("pelari-terakhir", JSON.stringify(rec)); } catch (x) {}
+    status("Selesai. " + Math.round(s.dist) + " m dalam " + hms(s.acc) + ".");
+    showLast(rec); ui(); render();
+  };
+
+  function showLast(rec) {
+    if (!rec) return;
+    var d = new Date(rec.at);
+    $("terakhir").textContent = "Lari terakhir: " + rec.dist.toLocaleString("id-ID") + " m dalam " + hms(rec.ms) +
+      " (" + d.toLocaleDateString("id-ID", { day: "numeric", month: "short" }) + ")";
+  }
+  try { var saved = localStorage.getItem("pelari-terakhir"); if (saved) showLast(JSON.parse(saved)); } catch (x) {}
+
+  // Lagu (daftar lagunya ada di bagian DAFTAR LAGU di atas script ini)
+  var cur = 0;
+  var audio = $("audio");
+
+  function renderSongs() {
+    var box = $("songs");
+    box.textContent = "";
+    songs.forEach(function (sg, i) {
+      var row = document.createElement("div"); row.className = "song";
+      var playing = i === cur && !audio.paused;
+      var name = document.createElement("button"); name.className = "nama" + (playing ? " main" : "");
+      name.textContent = sg.title;
+      var info = document.createElement("span"); info.className = "info";
+      info.textContent = playing ? "Sedang diputar" : "Ketuk untuk memutar";
+      name.appendChild(info);
+      name.onclick = function () { playSong(i); };
+      row.appendChild(name);
+      box.appendChild(row);
+    });
+    $("btnPutar").textContent = audio.paused ? "Putar lagu" : "Jeda lagu";
+  }
+
+  function playSong(i) {
+    cur = i;
+    audio.src = songs[i].src;
+    var p = audio.play();
+    if (p && p.catch) p.catch(function () {});
+    $("musicInfo").textContent = "Memutar: " + songs[i].title;
+    renderSongs();
+  }
+  function startMusic() {
+    if (audio.getAttribute("src") && audio.currentTime > 0) { audio.play().catch(function () {}); renderSongs(); return; }
+    playSong(cur);
+  }
+  audio.addEventListener("ended", function () { playSong((cur + 1) % songs.length); });
+  audio.addEventListener("error", function () {
+    $("musicInfo").textContent = "File tidak ditemukan: " + songs[cur].src + ". Cek nama dan lokasinya.";
+  });
+  audio.addEventListener("pause", renderSongs);
+  audio.addEventListener("play", renderSongs);
+  $("btnPutar").onclick = function () { if (audio.paused) startMusic(); else audio.pause(); };
+  $("btnNext").onclick = function () { playSong((cur + 1) % songs.length); };
+
+  tickJam(); render(); ui(); renderSongs();
+  setInterval(function () { tickJam(); if (s.mode === "running") render(); }, 250);
+})();
+</script>
+</body>
+</html>
